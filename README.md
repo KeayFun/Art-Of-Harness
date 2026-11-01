@@ -40,7 +40,7 @@ python -m http.server 8000
 .
 ├── index.html                    # 导航首页（期刊索引风格）
 ├── pages/
-│   └── super-agent/
+│   └── deepseek-super-agent/
 │       └── index.html            # 报告正文：HTML + 内联 CSS + 内联 SVG 图表
 ├── README.md
 └── LICENSE                       # Apache License 2.0
