@@ -2,6 +2,8 @@
 
 一份关于 **DeepSeek Super-agent** 架构的技术报告，以单页静态网页形式呈现。
 
+**在线预览：** <https://keayfun.github.io/Art-Of-Harness/>
+
 > 标题：《给 Agent 补一层操作系统》
 > 副标题：DeepSeek Super-agent 技术报告 · 思想、业务流程与适用场景
 
