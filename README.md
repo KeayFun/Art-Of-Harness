@@ -38,12 +38,14 @@ python -m http.server 8000
 
 ```
 .
-├── index.html   # 全部内容：HTML + 内联 CSS + 内联 SVG 图表
+├── index.html               # 导航首页（期刊索引风格）
+├── super-agent/
+│   └── index.html           # 报告正文：HTML + 内联 CSS + 内联 SVG 图表
 ├── README.md
-└── LICENSE      # Apache License 2.0
+└── LICENSE                  # Apache License 2.0
 ```
 
-页面内包含 4 张手写 SVG 图表：瓶颈换位、双层架构、事件流、消融实验对比。
+报告页面内包含 4 张手写 SVG 图表：瓶颈换位、双层架构、事件流、消融实验对比。
 
 ## 免责声明
 

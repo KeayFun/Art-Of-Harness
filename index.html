@@ -3,391 +3,147 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DeepSeek Super-agent 技术报告</title>
+<title>Art of Harness · Agent 系统拆解笔记</title>
+<meta name="description" content="收录关于 Agent 架构、上下文工程与 Harness 设计的深度拆解笔记。">
 <style>
 :root{
-  --bg:#FAFAF8; --card:#FFFFFF; --line:rgba(0,0,0,.10);
+  --bg:#FAFAF8; --card:#FFFFFF; --line:rgba(0,0,0,.10); --line-strong:rgba(0,0,0,.16);
   --t1:#2C2C2A; --t2:#5F5E5A; --t3:#888780;
-  --red:#A32D2D; --redbg:#FCEBEB; --green:#0F6E56; --greenbg:#E1F5EE;
-  --amber:#854F0B; --amberbg:#FAEEDA; --blue:#185FA5; --bluebg:#E6F1FB;
+  --accent:#0F6E56; --accent-soft:#E1F5EE; --mark:#A32D2D;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Songti SC","Source Han Serif SC","SimSun",Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
 }
 *{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--t1);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-  font-size:14px;line-height:1.75;}
-.wrap{max-width:940px;margin:0 auto;padding:48px 28px 72px;}
-h1{font-size:24px;font-weight:500;margin:0 0 8px;letter-spacing:-.01em;}
-.sub{color:var(--t2);font-size:14px;margin:0 0 8px;}
-.meta{color:var(--t3);font-size:12px;margin:0 0 32px;}
-h2{font-size:16px;font-weight:500;margin:44px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line);}
-h3{font-size:14px;font-weight:500;margin:26px 0 8px;}
-p{margin:0 0 12px;}
-.lead{font-size:15px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px;margin:0 0 10px;}
-.lead strong{font-weight:500;}
-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);
-  border-radius:12px;overflow:hidden;font-size:13px;margin:14px 0;}
-th{text-align:left;font-weight:500;background:#F1EFE8;padding:11px 14px;border-bottom:1px solid var(--line);font-size:12px;color:var(--t2);}
-td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;}
-tr:last-child td{border-bottom:none;}
-.note{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--t3);
-  border-radius:8px;padding:14px 18px;font-size:13px;color:var(--t2);margin:16px 0;}
-.note.r{border-left-color:var(--red);}
-.note.g{border-left-color:var(--green);}
-.note.a{border-left-color:var(--amber);}
-.note strong{color:var(--t1);font-weight:500;}
-ul,ol{margin:0 0 12px;padding-left:20px;}
-li{margin-bottom:6px;}
-code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;
-  background:#F1EFE8;border-radius:4px;padding:1px 5px;}
-figure{margin:18px 0 22px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 16px 10px;}
-figcaption{font-size:12px;color:var(--t3);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);}
-figcaption b{color:var(--t2);font-weight:500;}
-.kv{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0;}
-.kv > div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
-.kv h4{margin:0 0 4px;font-size:13px;font-weight:500;}
-.kv p{margin:0;font-size:12.5px;color:var(--t2);line-height:1.65;}
-.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;background:#F1EFE8;color:var(--t2);margin-right:6px;}
-.tag.g{background:var(--greenbg);color:var(--green);}
-.tag.a{background:var(--amberbg);color:var(--amber);}
-.tag.r{background:var(--redbg);color:var(--red);}
-.tag.b{background:var(--bluebg);color:var(--blue);}
-.foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--t3);}
-.foot a{color:var(--t3);}
-@media(max-width:640px){.kv{grid-template-columns:1fr}.wrap{padding:32px 18px 56px}}
+  font-family:var(--sans);font-size:14px;line-height:1.75;
+  -webkit-font-smoothing:antialiased;}
+/* 纸张颗粒 */
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.04;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");}
+.wrap{position:relative;z-index:1;max-width:940px;margin:0 auto;padding:56px 28px 72px;}
+
+/* 页眉 */
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:20px;
+  padding-bottom:14px;border-bottom:1px solid var(--line-strong);}
+.kicker{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--t3);}
+.issue{font-size:11px;letter-spacing:.1em;color:var(--t3);white-space:nowrap;}
+.issue b{color:var(--t2);font-weight:500;}
+
+/* 报头 */
+.masthead{padding:52px 0 40px;}
+h1{margin:0 0 18px;font-family:var(--serif);font-weight:400;
+  font-size:clamp(42px,7.4vw,68px);line-height:1.04;letter-spacing:-.022em;}
+h1 em{font-style:italic;color:var(--accent);}
+.lede{margin:0;max-width:34em;font-size:15px;line-height:1.85;color:var(--t2);}
+.lede b{font-weight:500;color:var(--t1);}
+.rule{height:1px;background:var(--line-strong);margin:0;}
+
+/* 目录 */
+.contents{padding-top:34px;}
+.contents-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px;}
+.contents-head h2{margin:0;font-size:11px;font-weight:500;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--t3);}
+.contents-head .count{font-size:11px;color:var(--t3);letter-spacing:.06em;}
+
+/* 条目 */
+.entry{display:grid;grid-template-columns:64px 1fr 36px;gap:0 20px;align-items:start;
+  padding:26px 0 28px;border-top:1px solid var(--line);text-decoration:none;color:inherit;
+  transition:background .2s ease;}
+.entry:last-of-type{border-bottom:1px solid var(--line);}
+.entry:hover{background:linear-gradient(90deg,rgba(15,110,86,.045),rgba(15,110,86,0) 62%);}
+.entry:focus-visible{outline:2px solid var(--accent);outline-offset:4px;}
+.num{font-family:var(--serif);font-size:13px;color:var(--t3);letter-spacing:.08em;
+  padding-top:9px;transition:color .2s ease;}
+.entry:hover .num{color:var(--accent);}
+.entry h3{margin:0 0 6px;font-family:var(--serif);font-weight:400;
+  font-size:25px;line-height:1.35;letter-spacing:-.008em;}
+.entry h3 span{background-image:linear-gradient(var(--accent),var(--accent));
+  background-repeat:no-repeat;background-size:0 1px;background-position:0 100%;
+  transition:background-size .35s ease;padding-bottom:2px;}
+.entry:hover h3 span{background-size:100% 1px;}
+.entry .sub{margin:0 0 10px;font-size:12.5px;color:var(--t3);letter-spacing:.01em;}
+.entry .desc{margin:0 0 14px;font-size:13.5px;line-height:1.8;color:var(--t2);max-width:46em;}
+.tags{display:flex;flex-wrap:wrap;gap:6px;}
+.tag{font-size:10.5px;letter-spacing:.06em;color:var(--t2);
+  border:1px solid var(--line-strong);border-radius:2px;padding:2px 7px;}
+.arrow{font-family:var(--serif);font-size:17px;color:var(--t3);padding-top:6px;
+  transition:transform .25s ease,color .2s ease;}
+.entry:hover .arrow{transform:translateX(6px);color:var(--accent);}
+
+/* 页脚 */
+.foot{margin-top:52px;padding-top:16px;border-top:1px solid var(--line);
+  display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;
+  font-size:11.5px;color:var(--t3);letter-spacing:.03em;}
+.foot a{color:var(--t3);text-decoration:none;border-bottom:1px solid transparent;transition:color .15s,border-color .15s;}
+.foot a:hover{color:var(--t1);border-bottom-color:var(--line-strong);}
+.foot .mark{color:var(--mark);}
+
+/* 入场动画 */
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.anim{animation:rise .7s cubic-bezier(.22,.61,.36,1) both;}
+.d1{animation-delay:.05s}.d2{animation-delay:.14s}.d3{animation-delay:.24s}.d4{animation-delay:.34s}
+@media(prefers-reduced-motion:reduce){
+  .anim{animation:none}
+  .entry,.entry h3 span,.arrow,.num{transition:none}
+}
+
+@media(max-width:640px){
+  .wrap{padding:36px 18px 52px}
+  .masthead{padding:36px 0 30px}
+  .entry{grid-template-columns:34px 1fr;gap:0 14px}
+  .entry h3{font-size:21px}
+  .arrow{display:none}
+  .num{font-size:11px;padding-top:7px}
+  .top{flex-wrap:wrap;gap:6px}
+}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-<h1>给 Agent 补一层操作系统</h1>
-<p class="sub">DeepSeek Super-agent 技术报告 · 思想、业务流程与适用场景</p>
-<p class="meta">原文《Super-agent 设计探索：迈向更自主的 Agent 系统》｜DeepSeek Harness 团队｜2026-10-31 20:29｜原型仓库 deepseek-ai/dsh-superagent-prototype</p>
-
-<div class="lead">
-<strong>核心判断：Super-agent 不是在把模型做得更强，而是在给 Agent 补一层操作系统。</strong>它赌的是——当单任务能力不再稀缺，稀缺的是「人来管 AI」的带宽。于是它做了一件反直觉的事：把 Session 从产品界面降级为内部实现细节，让系统去承担调度的脏活，把人往上推到目标设定与验收。
-</div>
-
-<div class="note a">
-<strong>阅读前提：</strong>这是一篇<strong>面向工程实践的架构思路探讨</strong>，不是产品发布。作者在开头和仓库 README 里都明确写了——不是官方产品、不是生产可用软件，公开版本与内部运行版本存在差异，文中部分特性仍在开发中。把它当架构论文读，不要当产品评测读。
-</div>
-
-<h2>一、问题：瓶颈换位了</h2>
-
-<p>过去一年，Coding Agent 已经证明模型能用工具解决复杂问题，而且越来越不需要人逐步盯着。但人的注意力没有跟着涨——<strong>一个人通常只能同时跟进 3 到 5 个活跃 Session</strong>。</p>
-
-<p>而现有主流 Agent 的工作模式仍然以单一 Session 为基本单位，Session 之间彼此独立。你上午在群聊里讨论一个需求，下午去 GitHub 审 PR，中间那段上下文得靠你自己记住。于是出现了两条完全不同的天花板：</p>
-
-<figure>
-<svg viewBox="0 0 680 300" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
-<title>模型能力与人的注意力两条上限的差距</title>
-<desc>模型单任务能力持续上升，而人的注意力上限基本是一条水平线，两者之间的差距就是无法变现的产能</desc>
-<defs>
-  <marker id="ax" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-  </marker>
-</defs>
-<polygon points="300,190 350,166 400,140 450,113 500,88 550,70 620,52 620,196 300,196" fill="#FCEBEB"/>
-<line x1="60" y1="248" x2="640" y2="248" stroke="#B4B2A9" stroke-width="1" marker-end="url(#ax)"/>
-<line x1="60" y1="248" x2="60" y2="40" stroke="#B4B2A9" stroke-width="1" marker-end="url"/>
-<path d="M60 232 C 200 226, 300 190, 400 140 S 560 70, 620 52" fill="none" stroke="#0F6E56" stroke-width="2"/>
-<line x1="60" y1="196" x2="620" y2="196" stroke="#A32D2D" stroke-width="2" stroke-dasharray="6 4"/>
-<text x="636" y="42" font-size="12" fill="#0F6E56" text-anchor="end">单任务上限 = 模型能力</text>
-<text x="60" y="186" font-size="12" fill="#A32D2D">多任务上限 = 人的注意力（3–5 个 Session）</text>
-<text x="470" y="130" font-size="12" fill="#A32D2D">这段产能无法变现</text>
-<text x="470" y="152" font-size="11" fill="#888780">模型再强，人也接不住</text>
-<text x="620" y="266" font-size="11" fill="#5F5E5A" text-anchor="end">时间 / 模型迭代</text>
-</svg>
-<figcaption><b>图 1 ｜ 瓶颈换位。</b>单任务的上限取决于模型能力，多任务的上限取决于人的注意力。两条线越拉越开，中间那片红色区域就是 Super-agent 想去吃掉的存量。</figcaption>
-</figure>
-
-<p>原文还点了三个非常具体的损耗，都是工程人熟悉的痛：</p>
-
-<ul>
-<li><strong>单会话同步阻塞。</strong>一个 Session 在跑长任务，你在里面发的新指令只能排队，或者干脆打断它。</li>
-<li><strong>多任务上下文混乱。</strong>靠 CLI、MCP、外部连接器把本地 Agent 扩起来，也解决不了跨 Session 的上下文同步——那是人要手动搬运的。</li>
-<li><strong>设备离线即停。</strong>Agent 跑在你电脑上，合盖就断。</li>
-</ul>
-
-<h2>二、思想：把 Session 降级为实现细节</h2>
-
-<p>整套设计最核心的一句话，是「将会话管理与上下文同步从人手上移到系统层面」。翻译成工程语言：<strong>Session 不再是一个产品概念，而是系统内部的实现细节。</strong>用户面对的始终是「一个助手」，背后可能同时跑着五个会话。</p>
-
-<p>人因此上移一层：从「逐步干预执行」变成「设定目标 + 验收结果」。作者把这个形态和它的系统架构合起来称作 <strong>Super-agent</strong>，并归纳成四条基础特征。这四条不是形容词，每一条都对应一个具体的工程模块：</p>
-
-<table>
-<tr><th style="width:14%">特征</th><th style="width:38%">含义</th><th>靠什么撑住</th></tr>
-<tr><td><strong>连续</strong></td><td>用户在 IM 和 GitHub 里跟同一个 Agent 交互，感受上始终只有一个 Agent</td><td>Router 常驻 + 全局上下文 + Thread 归属</td></tr>
-<tr><td><strong>高效</strong></td><td>多任务并行推进，且不阻塞新指令</td><td>Worker 隔离上下文 + 异步 ReAct Loop</td></tr>
-<tr><td><strong>主动</strong></td><td>持续观察环境事件，不必逐条下指令就能推进值得处理的事</td><td>事件驱动 + 两级过滤 + 投机执行</td></tr>
-<tr><td><strong>持久</strong></td><td>始终在线，异常后可自动恢复</td><td>存算分离 + 外部 Watchdog</td></tr>
-</table>
-
-<div class="note g">
-<strong>值得单独记住的一句：</strong>作者自己说，整套设计「并没有提出全新的理论，而是将计算机系统中经典的工程思想应用到了 Agent 系统的构建中」。这句话既是谦虚，也是这篇东西最值钱的地方——它把 Agent 问题重新框定成了<strong>系统问题</strong>，而不是模型问题。
-</div>
-
-<h2>三、架构：Router 与 Worker 的两层分工</h2>
-
-<p>双层设计的关键不是「分了两层」，而是<strong>怎么切</strong>：把「连续性」和「并发效率」这两件互相打架的事，拆给两个不同的层去各自负责。</p>
-
-<figure>
-<svg viewBox="0 0 680 392" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
-<title>Super-agent 的 Router 与 Worker 双层架构</title>
-<desc>多个事件源进入常驻的 Router 层，Router 把任务分派给隔离上下文的多个 Worker，Worker 可再调用 Subagent，全部状态落入共享数据库</desc>
-<defs>
-  <marker id="a2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-  </marker>
-</defs>
-
-<text x="40" y="34" font-size="11" fill="#888780">事件源</text>
-<text x="210" y="34" font-size="11" fill="#888780">Router 层</text>
-<text x="400" y="34" font-size="11" fill="#888780">Worker 层</text>
-
-<rect x="40" y="48" width="120" height="38" rx="8" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
-<text x="100" y="67" font-size="12" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">群聊 / IM</text>
-<rect x="40" y="98" width="120" height="38" rx="8" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
-<text x="100" y="117" font-size="12" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">GitHub PR</text>
-<rect x="40" y="148" width="120" height="38" rx="8" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
-<text x="100" y="167" font-size="12" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">邮件 / 日程</text>
-<rect x="40" y="198" width="120" height="38" rx="8" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
-<text x="100" y="217" font-size="12" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">CI 结果</text>
-
-<rect x="210" y="60" width="150" height="176" rx="12" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
-<text x="285" y="86" font-size="13" font-weight="500" fill="#04342C" text-anchor="middle" dominant-baseline="central">Router</text>
-<text x="285" y="108" font-size="11.5" fill="#0F6E56" text-anchor="middle" dominant-baseline="central">常驻 · 单 LLM Session</text>
-<text x="285" y="128" font-size="11.5" fill="#0F6E56" text-anchor="middle" dominant-baseline="central">全局上下文与记忆</text>
-<text x="285" y="148" font-size="11.5" fill="#0F6E56" text-anchor="middle" dominant-baseline="central">只分派，不执行</text>
-<text x="285" y="168" font-size="11.5" fill="#0F6E56" text-anchor="middle" dominant-baseline="central">无需 Bash 工具</text>
-<text x="285" y="188" font-size="11.5" fill="#0F6E56" text-anchor="middle" dominant-baseline="central">轻模型即可</text>
-<text x="285" y="210" font-size="11" fill="#888780" text-anchor="middle" dominant-baseline="central">积压事件合并批处理</text>
-
-<rect x="400" y="48" width="150" height="52" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
-<text x="475" y="66" font-size="12" font-weight="500" fill="#042C53" text-anchor="middle" dominant-baseline="central">Worker 1</text>
-<text x="475" y="84" font-size="11" fill="#185FA5" text-anchor="middle" dominant-baseline="central">独立上下文 · 全工具</text>
-
-<rect x="400" y="122" width="150" height="52" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
-<text x="475" y="140" font-size="12" font-weight="500" fill="#042C53" text-anchor="middle" dominant-baseline="central">Worker 2</text>
-<text x="475" y="158" font-size="11" fill="#185FA5" text-anchor="middle" dominant-baseline="central">问题复现</text>
-
-<rect x="400" y="196" width="150" height="52" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
-<text x="475" y="214" font-size="12" font-weight="500" fill="#042C53" text-anchor="middle" dominant-baseline="central">Worker 3</text>
-<text x="475" y="232" font-size="11" fill="#185FA5" text-anchor="middle" dominant-baseline="central">代码审查</text>
-
-<rect x="572" y="196" width="68" height="52" rx="8" fill="#FAFAF7" stroke="#B4B2A9" stroke-width="0.5"/>
-<text x="606" y="215" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">Sub</text>
-<text x="606" y="231" font-size="11" fill="#5F5E5A" text-anchor="middle" dominant-baseline="central">agent</text>
-
-<line x1="160" y1="67" x2="208" y2="86" stroke="#888780" stroke-width="1" marker-end="url(#a2)"/>
-<line x1="160" y1="117" x2="208" y2="112" stroke="#888780" stroke-width="1" marker-end="url(#a2)"/>
-<line x1="160" y1="167" x2="208" y2="152" stroke="#888780" stroke-width="1" marker-end="url(#a2)"/>
-<line x1="160" y1="217" x2="208" y2="196" stroke="#888780" stroke-width="1" marker-end="url(#a2)"/>
-
-<line x1="360" y1="90" x2="398" y2="74" stroke="#0F6E56" stroke-width="1.2" marker-end="url(#a2)"/>
-<line x1="360" y1="148" x2="398" y2="148" stroke="#0F6E56" stroke-width="1.2" marker-end="url(#a2)"/>
-<line x1="360" y1="206" x2="398" y2="222" stroke="#0F6E56" stroke-width="1.2" marker-end="url(#a2)"/>
-<line x1="550" y1="222" x2="570" y2="222" stroke="#888780" stroke-width="1" marker-end="url(#a2)"/>
-
-<rect x="210" y="300" width="430" height="52" rx="8" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
-<text x="425" y="318" font-size="12" fill="#2C2C2A" text-anchor="middle" dominant-baseline="central">共享状态库（Session / Thread / Worker 状态）</text>
-<text x="425" y="337" font-size="11" fill="#888780" text-anchor="middle" dominant-baseline="central">状态与计算分离，本地只留轻量 daemon</text>
-
-<line x1="285" y1="236" x2="285" y2="298" stroke="#888780" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#a2)"/>
-<line x1="475" y1="248" x2="475" y2="298" stroke="#888780" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#a2)"/>
-</svg>
-<figcaption><b>图 2 ｜ 双层架构。</b>Router 承接所有入口、维护全局上下文、只做分派；Worker 各自隔离上下文、挂满工具、专注单任务。Worker 不直接面对用户，结果回报给 Router 由它统一对外。</figcaption>
-</figure>
-
-<h3>Router：便宜但一直在</h3>
-<p>Router 是持续运行的全局协调节点，统一承接来自 IM、GitHub、邮件的交互，是全局的排序点、协调点和记忆。它<strong>不执行具体任务，甚至不需要带 Bash 工具</strong>。作者判断 Router 的活往往没有看起来复杂，用轻量模型通常就能平衡速度与效果。</p>
-<p>还有一个容易被忽略的细节：Router 是单 Session 的，上一轮推理期间积压的多条事件会<strong>自动合并、批处理注入</strong>。这是它在「保持连续」的同时摊薄单个决定推理成本的方式。</p>
-
-<h3>Worker：贵，但只干一件事</h3>
-<p>Worker 拥有隔离上下文、挂载完整执行工具、专注单一任务。因为它直接决定任务结果和代码质量，通常需要<strong>当前最强的模型</strong>。Worker 之间互不阻塞；一个 Worker 可以自己拉起 Subagent，甚至可以本身就是一个 Agent Team，而上层 Router 对此无感。</p>
-
-<div class="note">
-<strong>这个切法的精妙之处：</strong>「连续」要求一个稳定、便宜、记得住全局的大脑；「并发」要求多个昂贵、隔离、专心干活的执行体。把两者混在一个 Session 里，必然一方拖累另一方——这正是现有 Agent 卡住的根因。
-</div>
-
-<h2>四、业务流程：一条 bug 反馈的完整旅程</h2>
-
-<p>架构是静态的，真正体现「自主」的是事件怎么流。这条链路有五个关键站点，每一站都对应一个设计取舍。</p>
-
-<figure>
-<svg viewBox="0 0 680 418" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
-<title>从群聊消息到静默修复的五段事件流程</title>
-<desc>事件先经程序规则粗筛，再由大模型判断是否行动，然后按 Thread 归属派发给 Worker，Worker 在后台投机执行后决定提交或静默</desc>
-<defs>
-  <marker id="a3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-  </marker>
-</defs>
-
-<rect x="40" y="24" width="600" height="58" rx="10" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
-<text x="62" y="46" font-size="12.5" font-weight="500" fill="#2C2C2A" dominant-baseline="central">1　事件产生</text>
-<text x="62" y="66" font-size="12" fill="#5F5E5A" dominant-baseline="central">群聊消息、GitHub 评论、邮件与日程提醒、CI 测试结果，都可能触发</text>
-
-<rect x="40" y="94" width="600" height="58" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.5"/>
-<text x="62" y="116" font-size="12.5" font-weight="500" fill="#2C2C2A" dominant-baseline="central">2　Fast Path　程序规则粗筛</text>
-<text x="62" y="136" font-size="12" fill="#5F5E5A" dominant-baseline="central">判断来源、群组范围、白名单等确定性条件，绝大多数噪音在此被丢弃</text>
-
-<rect x="40" y="164" width="600" height="58" rx="10" fill="#FFFFFF" stroke="#B4B2A9" stroke-width="0.5"/>
-<text x="62" y="186" font-size="12.5" font-weight="500" fill="#2C2C2A" dominant-baseline="central">3　Slow Path　模型判断是否行动</text>
-<text x="62" y="206" font-size="12" fill="#5F5E5A" dominant-baseline="central">用提示词写策略，等于一个自然语言扩展点，行为可随时开关</text>
-
-<rect x="40" y="234" width="600" height="58" rx="10" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
-<text x="62" y="256" font-size="12.5" font-weight="500" fill="#042C53" dominant-baseline="central">4　Thread 归属与派发</text>
-<text x="62" y="276" font-size="12" fill="#185FA5" dominant-baseline="central">同一 PR、同一话题、同一邮件链下的连续事件构成一个 Thread；已有 Worker 订阅则直投，不再经 Router</text>
-
-<rect x="40" y="304" width="600" height="58" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
-<text x="62" y="326" font-size="12.5" font-weight="500" fill="#04342C" dominant-baseline="central">5　Worker 投机执行，然后决定说不说</text>
-<text x="62" y="346" font-size="12" fill="#0F6E56" dominant-baseline="central">后台复现、分析、试修；确认问题存在且有简单修复才提交，否则保持沉默</text>
-
-<line x1="340" y1="82" x2="340" y2="92" stroke="#888780" stroke-width="1.2" marker-end="url(#a3)"/>
-<line x1="340" y1="152" x2="340" y2="162" stroke="#888780" stroke-width="1.2" marker-end="url(#a3)"/>
-<line x1="340" y1="222" x2="340" y2="232" stroke="#888780" stroke-width="1.2" marker-end="url(#a3)"/>
-<line x1="340" y1="292" x2="340" y2="302" stroke="#888780" stroke-width="1.2" marker-end="url(#a3)"/>
-</svg>
-<figcaption><b>图 3 ｜ 事件流。</b>最值得注意的是第 4、5 站：订阅直通把「转发」这种纯开销从全局节点上卸掉；投机执行则让 Agent 可以在没人要求的情况下先把活干了，再决定要不要说话。</figcaption>
-</figure>
-
-<h3>两级过滤：借用 Fast Path / Slow Path</h3>
-<p>真实群聊噪音极大，绝大多数消息不需要 AI 介入。所以先由程序做确定性筛选（来源、群组范围、白名单），存活下来的候选才交给大模型按策略判断。这是操作系统里经典的快慢路径拆分，工程上还有个额外好处：<strong>策略写在提示词里，改行为不用改代码。</strong></p>
-
-<h3>订阅直通：把 Router 从转发器里解放出来</h3>
-<p>同一 PR、同一 IM 话题、同一邮件链下的连续事件归成一个 Thread。Router 由第一个事件创建 Worker 之后，该 Worker <strong>订阅</strong>这个 Thread，后续事件直接投递，只有无人订阅的事件才回到 Router 派单。这一手直接决定了 Router 不会成为吞吐瓶颈。</p>
-
-<h3>投机执行：先做了再说</h3>
-<p>这是全文最有想象力的一段。作者引入了计算机体系结构里的<strong>投机执行</strong>：结果是否被采用尚不确定时，先在后台提前尝试，有价值就提交，没价值就丢弃。</p>
-<p>DeepSeek 内部配置的策略是「静默复现并修复」——有人在群里反馈 bug，AI 先在后台复现、分析原因，<strong>确认问题确实存在并且找到简单修复方法之后才提交，否则保持安静</strong>。这个约束很关键：没有它，主动就会退化成骚扰。</p>
-<p>同样的机制也能用在个人助手上：收到会议邀请，提前核对日程、整理资料、备好回复草稿——反正不花你的时间。</p>
-
-<h3>上下文当缓存管</h3>
-<p>Worker 的上下文窗口被当作 cache 来经营：<strong>Inline</strong> 把近期大概率要用的信息拉进窗口，<strong>Spill</strong> 把超出预算的内容留在窗口外只留引用。Trigger、Thread、Worker 各有唯一 ID，串成一张引用图，支持按需多跳检索。这样长任务不会因为上下文膨胀而崩掉。</p>
-
-<h2>五、工程支撑：让它在没人看着的时候也不死</h2>
-
-<div class="kv">
-<div>
-<h4>存算分离</h4>
-<p>执行循环放在云端，会话状态存进数据库，本地只留一个轻量 daemon。电脑合盖、离线，任务照样继续跑。</p>
-</div>
-<div>
-<h4>外部 Watchdog</h4>
-<p>独立组件负责检查任务是否陷入无效循环，并尝试修复。把「自杀检测」交给外部，比让 Agent 自我反省可靠。</p>
-</div>
-<div>
-<h4>异步 ReAct Loop</h4>
-<p>执行耗时任务期间仍能响应新指令，不必等这一轮跑完。原文注明<strong>尚未默认开启</strong>。</p>
-</div>
-<div>
-<h4>事件合并注入</h4>
-<p>Router 在上一轮推理期间积压的事件合并批处理，既保持连续，又把多个决定的推理成本摊薄。</p>
-</div>
-</div>
-
-<h2>六、实验数据：快了多少，代价是什么</h2>
-
-<p>团队做了一次消融实验，同时灌入群聊和 GitHub CI 两条消息流。单次运行约 300 条消息，其中约 20 条是工作请求；编码工作被替换成一个只消耗时间的工具，所以测的是<strong>调度与协作</strong>，不是单任务执行质量。消息间隔与工作时长按 1/4 缩放，模型调用延迟保持真实，每种配置重复 5 次。</p>
-
-<figure>
-<svg viewBox="0 0 680 278" width="100%" role="img" xmlns="http://www.w3.org/2000/svg">
-<title>三种配置下的任务完成时间对比</title>
-<desc>Super-agent 的 p50 为 12.4 分钟、p95 为 15.7 分钟，优于单会话加 Subagent 的 20.4 与 29.5 分钟</desc>
-<text x="220" y="30" font-size="11" fill="#888780">0</text>
-<text x="400" y="30" font-size="11" fill="#888780" text-anchor="middle">15</text>
-<text x="580" y="30" font-size="11" fill="#888780" text-anchor="middle">30 分钟</text>
-<line x1="220" y1="38" x2="592" y2="38" stroke="#D3D1C7" stroke-width="0.5"/>
-
-<text x="212" y="62" font-size="12" fill="#2C2C2A" text-anchor="end">Super-agent</text>
-<rect x="220" y="50" width="149" height="13" rx="3" fill="#0F6E56"/>
-<text x="378" y="60" font-size="11" fill="#0F6E56" dominant-baseline="central">12.4</text>
-<rect x="220" y="68" width="188" height="13" rx="3" fill="#5DCAA5"/>
-<text x="417" y="78" font-size="11" fill="#0F6E56" dominant-baseline="central">15.7</text>
-
-<text x="212" y="130" font-size="12" fill="#2C2C2A" text-anchor="end">单 Session + Subagent</text>
-<rect x="220" y="118" width="245" height="13" rx="3" fill="#888780"/>
-<text x="474" y="128" font-size="11" fill="#5F5E5A" dominant-baseline="central">20.4</text>
-<rect x="220" y="136" width="354" height="13" rx="3" fill="#B4B2A9"/>
-<text x="583" y="146" font-size="11" fill="#5F5E5A" dominant-baseline="central">29.5</text>
-
-<text x="212" y="198" font-size="12" fill="#2C2C2A" text-anchor="end">delegate-first 提示词</text>
-<rect x="220" y="186" width="166" height="13" rx="3" fill="#888780"/>
-<text x="395" y="196" font-size="11" fill="#5F5E5A" dominant-baseline="central">13.8</text>
-<rect x="220" y="204" width="348" height="13" rx="3" fill="#B4B2A9"/>
-<text x="577" y="214" font-size="11" fill="#5F5E5A" dominant-baseline="central">29.0</text>
-
-<rect x="220" y="240" width="12" height="10" rx="2" fill="#0F6E56"/>
-<text x="238" y="245" font-size="11" fill="#5F5E5A" dominant-baseline="central">p50</text>
-<rect x="290" y="240" width="12" height="10" rx="2" fill="#B4B2A9"/>
-<text x="308" y="245" font-size="11" fill="#5F5E5A" dominant-baseline="central">p95</text>
-</svg>
-<figcaption><b>图 4 ｜ 消融实验（单位：分钟）。</b>Super-agent 的 p50 从 20.4 降到 12.4，p95 从 29.5 降到 15.7。数据为团队自报，作者明确标注「合成负载、简化环境、各跑 5 次，仅供参考」。</figcaption>
-</figure>
-
-<p>数字背后的原因比数字本身更有意思：<strong>中性提示词下，模型五次运行里一次都没有主动调用 Subagent</strong>，所有工作都留在主会话，反复被新消息打断，于是 p95 拖到 29.5 分钟。换成「优先委派」的提示词后，五次里有四次成功委派，剩下那次模型判断「这活小，我自己干」，恰恰就产生了长尾。</p>
-
-<div class="note a">
-<strong>这一点对做 Agent 的人最有现实价值：</strong>并发能力不是加一个 Subagent 工具就自动发生的。<strong>模型必须被显式鼓励去委派</strong>，否则它会倾向于自己扛——这是模型的行为偏好问题，不是架构缺陷。
-</div>
-
-<p>账本的另一面也写在同一张表上：<strong>Super-agent 每次运行读取的 cache token 比单会话方案更多。</strong>这是它的固有成本——Router 常驻、Worker 多开、上下文多份，换来了响应速度和稳定性。所以它不是什么场景都划算。</p>
-
-<h2>七、适用场景：先看四个准入条件</h2>
-
-<p>与其罗列行业，不如给一组判断条件。同时满足以下四条，Super-agent 这类架构才有意义：</p>
-
-<table>
-<tr><th style="width:26%">准入条件</th><th>为什么是硬条件</th></tr>
-<tr><td><strong>有多个消息源</strong></td><td>事件驱动是它的引擎。只有一个入口、且都是人主动发指令，用单 Session 更省</td></tr>
-<tr><td><strong>任务可并行且互相独立</strong></td><td>Worker 的价值来自互不阻塞。强串行流程用不上第二层</td></tr>
-<tr><td><strong>环境能产生结构化事件</strong></td><td>群聊、PR、邮件、CI 都有明确的归属和 ID，才能做 Thread 与两级过滤</td></tr>
-<tr><td><strong>允许后台试错</strong></td><td>投机执行的前提是「白干一次」的成本可接受。强合规、不可回滚的操作不适合</td></tr>
-</table>
-
-<h3>三个已经被验证或明确点名的方向</h3>
-
-<p><span class="tag g">已内部运行</span><strong>研发协作。</strong>这是 DeepSeek 自己的用法：基于该架构的内部实例已在日常研发中持续运行，参与问题复现与修复、代码审查响应，以及 DeepSeek Harness 自身的迭代。典型场景是——团队在群聊里讨论某个 bug，没人 @AI，它识别出潜在缺陷，在后台复现、找修复方案。</p>
-
-<p><span class="tag b">个人助手</span><strong>个人 Agent。</strong>原文的出发点就是 Personal Agent 集中涌现：直接接入消息、日程、邮件与工作平台，持续观察信息流并协助处理。会议邀请提前备料是它给的例子。作者特意说明，这种「持续在线 + 事件驱动」的模式并不局限于个人场景，个人助手只是其中一类。</p>
-
-<p><span class="tag b">跨平台</span><strong>同一条任务跨系统连续推进。</strong>一个任务在 IM 群聊里发起讨论，接着在 GitHub PR 里评审，再回到群里同步结论——全程对用户是同一个 Agent。这是「连续」这条特征最直接的使用场景。</p>
-
-<h3>不太适合的三种情况</h3>
-
-<ul>
-<li><strong>低频、单入口、纯问答。</strong>架构收益抵不过常驻开销，单 Session 更划算。</li>
-<li><strong>强审计要求的流程。</strong>投机执行意味着会存在「做了但没采用」的中间状态，审计链要额外设计。</li>
-<li><strong>环境给不出事件。</strong>没有结构化事件源，两级过滤和 Thread 归属都无从谈起，只能退回指令驱动。</li>
-</ul>
-
-<h2>八、边界：作者自己承认的四个难题</h2>
-
-<p>原文在结尾列了四个尚未解决的问题，这份坦诚比结论更有参考价值：</p>
-
-<table>
-<tr><th style="width:24%">难题</th><th>本质</th></tr>
-<tr><td><strong>系统可扩展性</strong></td><td>Router 是全局单点。订阅直通缓解了转发压力，但全局上下文与记忆仍是瓶颈</td></tr>
-<tr><td><strong>长期记忆</strong></td><td>Thread 结束后，Worker 的上下文怎么沉淀、怎么被下一次任务复用，没有给出方案</td></tr>
-<tr><td><strong>跨 Agent 通信</strong></td><td>多个 Agent 之间如何协商、避免重复劳动和相互踩踏，仍是开放问题</td></tr>
-<tr><td><strong>安全与隐私</strong></td><td>Agent 主动读群聊、读邮件、读 PR，权限边界与数据隔离如何设计</td></tr>
-</table>
-
-<div class="note r">
-<strong>别忽略这句免责声明：</strong>公开的原型与研究原型并非生产可用软件，公开版本与内部版本存在差异，文中部分特性仍在开发中。把它当成一份<strong>架构设计参考</strong>，比自己照着搭一套要理性得多——尤其是当你的场景并不满足上面那四个准入条件时。
-</div>
-
-<h2>九、一句话总结</h2>
-
-<div class="lead">
-Super-agent 的价值不在于它让 AI 多做了多少事，而在于它<strong>承认了一个此前被所有人绕开的约束</strong>：人同时只能盯 3 到 5 件事。绕过这个约束的办法不是让模型更强，而是把「管理会话」这件苦力从人身上拿走，交给一层常驻的调度系统。<br><br>
-它真正提出的问题因此变成了：<strong>当执行不再稀缺，你的价值还剩下什么？</strong>原文给的答案是——目标设定与结果验收。这个答案对做 Agent 的人是架构启示，对用 Agent 的人，是职业提醒。
-</div>
-
-<div class="foot">
-资料来源：DeepSeek Harness 团队《Super-agent 设计探索：迈向更自主的 Agent 系统》（2026-10-31），开源原型 deepseek-ai/dsh-superagent-prototype；实验数据均为团队自报，标注为初步参考。<br>
-本报告为架构梳理与解读，不代表 DeepSeek 官方立场。
-</div>
+  <header class="top anim d1">
+    <div class="kicker">Art of Harness</div>
+    <div class="issue">第 <b>01</b> 期 · 2026.11</div>
+  </header>
+
+  <section class="masthead anim d2">
+    <h1>把 Agent<br>拆开<em>看</em></h1>
+    <p class="lede">这里收录关于 <b>Agent 架构、上下文工程与 Harness 设计</b> 的深度拆解。
+      不追热点，只关心一件事：当一个系统开始自主行动，它的骨架究竟该长成什么样。</p>
+  </section>
+
+  <div class="rule anim d2"></div>
+
+  <main class="contents">
+    <div class="contents-head anim d3">
+      <h2>目录 / Contents</h2>
+      <span class="count">共 1 篇</span>
+    </div>
+
+    <a class="entry anim d3" href="super-agent/">
+      <div class="num">01</div>
+      <div>
+        <h3><span>给 Agent 补一层操作系统</span></h3>
+        <p class="sub">DeepSeek Super-agent 技术报告 · 思想、业务流程与适用场景</p>
+        <p class="desc">把 Session 从产品界面降级为内部实现细节：Router 承接全部入口与全局记忆，
+          只分派不执行；Worker 隔离上下文、专注单任务。含四张架构图、五段事件流拆解，
+          以及一次消融实验的真实账本。</p>
+        <div class="tags">
+          <span class="tag">架构</span>
+          <span class="tag">多 Agent</span>
+          <span class="tag">事件驱动</span>
+          <span class="tag">上下文工程</span>
+        </div>
+      </div>
+      <div class="arrow">&rarr;</div>
+    </a>
+  </main>
+
+  <footer class="foot anim d4">
+    <span>持续收录中 · 每篇均为独立拆解</span>
+    <span><a href="https://github.com/KeayFun/Art-Of-Harness">GitHub</a> · <span class="mark">Apache-2.0</span></span>
+  </footer>
 
 </div>
 </body>
